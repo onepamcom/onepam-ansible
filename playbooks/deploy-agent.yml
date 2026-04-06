@@ -1,0 +1,11 @@
+---
+- name: Deploy OnePAM agent
+  hosts: all
+  become: true
+
+  vars:
+    onepam_tenant_id: "YOUR-TENANT-UUID"
+    onepam_server_url: "https://onepam.com"
+
+  roles:
+    - role: onepam.agent.onepam_agent

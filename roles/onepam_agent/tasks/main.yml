@@ -1,0 +1,68 @@
+---
+- name: Validate tenant_id is provided
+  ansible.builtin.assert:
+    that:
+      - onepam_tenant_id | length > 0
+    fail_msg: "onepam_tenant_id is required"
+
+- name: Create OnePAM directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0750"
+  loop:
+    - "{{ onepam_install_dir }}/bin"
+    - "{{ onepam_install_dir }}/etc"
+    - "{{ onepam_install_dir }}/data/queue"
+
+- name: Detect architecture
+  ansible.builtin.set_fact:
+    onepam_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Download OnePAM agent binary
+  ansible.builtin.get_url:
+    url: "{{ onepam_release_url }}/agent/{{ onepam_agent_version }}/onepam-agent-linux-{{ onepam_arch }}"
+    dest: "{{ onepam_install_dir }}/bin/onepam-agent"
+    mode: "0755"
+    checksum: "sha256:{{ onepam_release_url }}/agent/{{ onepam_agent_version }}/onepam-agent-linux-{{ onepam_arch }}.sha256"
+  notify: Restart onepam-agent
+
+- name: Generate agent ID if not present
+  ansible.builtin.shell: |
+    if [ -f "{{ onepam_install_dir }}/etc/agent-id" ]; then
+      cat "{{ onepam_install_dir }}/etc/agent-id"
+    else
+      cat /proc/sys/kernel/random/uuid
+    fi
+  register: onepam_agent_id_result
+  changed_when: false
+
+- name: Persist agent ID
+  ansible.builtin.copy:
+    content: "{{ onepam_agent_id_result.stdout }}"
+    dest: "{{ onepam_install_dir }}/etc/agent-id"
+    mode: "0600"
+    force: false
+
+- name: Deploy agent configuration
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: "{{ onepam_install_dir }}/etc/agent.env"
+    mode: "0600"
+  notify: Restart onepam-agent
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: onepam-agent.service.j2
+    dest: /etc/systemd/system/onepam-agent.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart onepam-agent
+
+- name: Enable and start OnePAM agent
+  ansible.builtin.systemd:
+    name: onepam-agent
+    enabled: true
+    state: started
+    daemon_reload: true

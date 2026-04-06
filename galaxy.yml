@@ -1,0 +1,25 @@
+namespace: onepam
+name: agent
+version: 1.0.0
+readme: README.md
+authors:
+  - OnePAM <support@onepam.com>
+description: Ansible collection for deploying and configuring the OnePAM Zero Trust PAM agent
+license:
+  - MIT
+tags:
+  - pam
+  - security
+  - zerotrust
+  - ssh
+  - rdp
+  - monitoring
+  - privilegedaccess
+  - agent
+repository: https://github.com/onepamcom/onepam-ansible
+documentation: https://onepam.com/docs/install/ansible
+homepage: https://onepam.com
+issues: https://github.com/onepamcom/onepam-ansible/issues
+build_ignore:
+  - '*.tar.gz'
+  - .gitignore

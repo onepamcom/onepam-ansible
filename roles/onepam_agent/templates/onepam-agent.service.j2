@@ -1,0 +1,31 @@
+[Unit]
+Description=OnePAM Agent
+Documentation=https://onepam.com/docs
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+User=root
+Group=root
+EnvironmentFile=-{{ onepam_install_dir }}/etc/agent.env
+ExecStart={{ onepam_install_dir }}/bin/onepam-agent \
+    --server=${AGENT_API_URL} \
+    --tenant-id=${AGENT_TENANT_ID} \
+    --agent-id=${AGENT_ID} \
+    --data-dir={{ onepam_install_dir }}/data \
+    --log-level=${AGENT_LOG_LEVEL}
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=360
+WatchdogSec=120
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=onepam-agent
+
+[Install]
+WantedBy=multi-user.target
