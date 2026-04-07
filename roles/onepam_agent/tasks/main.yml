@@ -1,14 +1,36 @@
 ---
-- name: Validate tenant_id is provided
+- name: Verify target runs systemd
+  ansible.builtin.assert:
+    that:
+      - ansible_service_mgr == "systemd"
+    fail_msg: "OnePAM agent requires systemd (found {{ ansible_service_mgr }})"
+
+- name: Validate tenant_id is provided and is a valid UUID
   ansible.builtin.assert:
     that:
       - onepam_tenant_id | length > 0
-    fail_msg: "onepam_tenant_id is required"
+      - onepam_tenant_id | regex_search('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    fail_msg: "onepam_tenant_id must be a valid UUID (got '{{ onepam_tenant_id }}')"
+
+- name: Validate log_level
+  ansible.builtin.assert:
+    that:
+      - onepam_log_level in ['debug', 'info', 'warn', 'error']
+    fail_msg: "onepam_log_level must be one of: debug, info, warn, error (got '{{ onepam_log_level }}')"
+
+- name: Validate group_uuid when provided
+  ansible.builtin.assert:
+    that:
+      - onepam_group_uuid | regex_search('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    fail_msg: "onepam_group_uuid must be a valid UUID (got '{{ onepam_group_uuid }}')"
+  when: onepam_group_uuid | length > 0
 
 - name: Create OnePAM directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    owner: root
+    group: root
     mode: "0750"
   loop:
     - "{{ onepam_install_dir }}/bin"
@@ -17,30 +39,61 @@
 
 - name: Detect architecture
   ansible.builtin.set_fact:
-    onepam_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    onepam_arch: >-
+      {{ 'arm64' if ansible_architecture == 'aarch64' else
+         ('amd64' if ansible_architecture in ['x86_64', 'AMD64'] else
+         ansible_architecture) }}
+
+- name: Validate architecture is supported
+  ansible.builtin.assert:
+    that:
+      - onepam_arch in ['amd64', 'arm64']
+    fail_msg: "Unsupported architecture: {{ ansible_architecture }} (mapped to {{ onepam_arch }})"
 
 - name: Download OnePAM agent binary
   ansible.builtin.get_url:
     url: "{{ onepam_release_url }}/agent/{{ onepam_agent_version }}/onepam-agent-linux-{{ onepam_arch }}"
     dest: "{{ onepam_install_dir }}/bin/onepam-agent"
+    owner: root
+    group: root
     mode: "0755"
     checksum: "sha256:{{ onepam_release_url }}/agent/{{ onepam_agent_version }}/onepam-agent-linux-{{ onepam_arch }}.sha256"
   notify: Restart onepam-agent
 
-- name: Generate agent ID if not present
-  ansible.builtin.shell: |
-    if [ -f "{{ onepam_install_dir }}/etc/agent-id" ]; then
-      cat "{{ onepam_install_dir }}/etc/agent-id"
-    else
-      cat /proc/sys/kernel/random/uuid
-    fi
-  register: onepam_agent_id_result
+- name: Check for existing agent ID
+  ansible.builtin.stat:
+    path: "{{ onepam_install_dir }}/etc/agent-id"
+  register: onepam_agent_id_file
+
+- name: Read existing agent ID
+  ansible.builtin.slurp:
+    src: "{{ onepam_install_dir }}/etc/agent-id"
+  register: onepam_existing_agent_id
+  when: onepam_agent_id_file.stat.exists
+
+- name: Generate new agent ID
+  ansible.builtin.command:
+    cmd: "cat /proc/sys/kernel/random/uuid"
+  register: onepam_new_agent_id
   changed_when: false
+  when: not onepam_agent_id_file.stat.exists
+
+- name: Set agent ID fact
+  ansible.builtin.set_fact:
+    onepam_agent_id: "{{ (onepam_existing_agent_id.content | b64decode | trim) if onepam_agent_id_file.stat.exists else onepam_new_agent_id.stdout | trim }}"
+
+- name: Validate agent ID is non-empty
+  ansible.builtin.assert:
+    that:
+      - onepam_agent_id | length > 0
+    fail_msg: "Agent ID is empty — check {{ onepam_install_dir }}/etc/agent-id"
 
 - name: Persist agent ID
   ansible.builtin.copy:
-    content: "{{ onepam_agent_id_result.stdout }}"
+    content: "{{ onepam_agent_id }}"
     dest: "{{ onepam_install_dir }}/etc/agent-id"
+    owner: root
+    group: root
     mode: "0600"
     force: false
 
@@ -48,6 +101,8 @@
   ansible.builtin.template:
     src: agent.env.j2
     dest: "{{ onepam_install_dir }}/etc/agent.env"
+    owner: root
+    group: root
     mode: "0600"
   notify: Restart onepam-agent
 
@@ -55,6 +110,8 @@
   ansible.builtin.template:
     src: onepam-agent.service.j2
     dest: /etc/systemd/system/onepam-agent.service
+    owner: root
+    group: root
     mode: "0644"
   notify:
     - Reload systemd
