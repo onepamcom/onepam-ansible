@@ -1,7 +1,5 @@
 # OnePAM Ansible Collection
 
-[![CI](https://github.com/onepamcom/onepam-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/onepamcom/onepam-ansible/actions/workflows/ci.yml)
-
 Ansible collection for deploying and managing [OnePAM](https://onepam.com) agents on Linux hosts.
 
 ## Requirements
@@ -12,8 +10,24 @@ Ansible collection for deploying and managing [OnePAM](https://onepam.com) agent
 
 ## Installation
 
+Clone the repository and copy the role into your Ansible roles path:
+
 ```bash
-ansible-galaxy collection install onepam.agent
+git clone https://github.com/onepamcom/onepam-ansible.git
+cp -r onepam-ansible/roles/agent /etc/ansible/roles/onepam_agent
+```
+
+Or add it as a git submodule in your playbook project:
+
+```bash
+git submodule add https://github.com/onepamcom/onepam-ansible.git vendor/onepam-ansible
+```
+
+Then reference the role path in your `ansible.cfg`:
+
+```ini
+[defaults]
+roles_path = vendor/onepam-ansible/roles
 ```
 
 ## Quick Start
@@ -21,7 +35,8 @@ ansible-galaxy collection install onepam.agent
 ### Using the bundled playbook
 
 ```bash
-ansible-playbook -i inventory.yml onepam.agent.deploy-agent \
+cd onepam-ansible
+ansible-playbook -i inventory.yml playbooks/deploy-agent.yml \
   -e onepam_tenant_id="YOUR-TENANT-UUID"
 ```
 
@@ -31,7 +46,7 @@ ansible-playbook -i inventory.yml onepam.agent.deploy-agent \
 - hosts: all
   become: true
   roles:
-    - role: onepam.agent.agent
+    - role: agent
       vars:
         onepam_tenant_id: "YOUR-TENANT-UUID"
 ```
@@ -81,16 +96,6 @@ Set `onepam_state: absent` to reverse the process (stop service, remove files).
 # Lint
 pip install ansible ansible-lint
 ansible-lint
-
-# Build collection tarball
-ansible-galaxy collection build
-
-# Publish (dry run)
-./publish.sh
-
-# Publish to Galaxy
-export GALAXY_API_KEY='your-token'
-./publish.sh --publish
 ```
 
 ## License
@@ -100,5 +105,4 @@ Apache-2.0
 ## Links
 
 - [OnePAM Documentation](https://onepam.com/docs/install/ansible)
-- [Ansible Galaxy](https://galaxy.ansible.com/ui/repo/published/onepam/agent/)
 - [GitHub](https://github.com/onepamcom/onepam-ansible)

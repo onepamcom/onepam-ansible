@@ -20,6 +20,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deploy-agent` playbook for quick deployments
 - Support for Ubuntu 20.04/22.04/24.04, Debian 11/12, RHEL/CentOS/Rocky/Alma 8/9
 - Ansible 2.9+ compatibility
-- CI workflow with ansible-lint and ansible-test sanity
-- Publish workflow for Ansible Galaxy
 - Apache 2.0 license
