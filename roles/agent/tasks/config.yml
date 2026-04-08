@@ -1,0 +1,49 @@
+---
+- name: Check for existing agent ID
+  ansible.builtin.stat:
+    path: "{{ onepam_install_dir }}/etc/agent-id"
+  register: _onepam_agent_id_file
+
+- name: Read existing agent ID
+  ansible.builtin.slurp:
+    src: "{{ onepam_install_dir }}/etc/agent-id"
+  register: _onepam_existing_agent_id
+  when: _onepam_agent_id_file.stat.exists
+
+- name: Generate new agent ID
+  ansible.builtin.command:
+    cmd: cat /proc/sys/kernel/random/uuid
+  register: _onepam_new_agent_id
+  changed_when: false
+  when: not _onepam_agent_id_file.stat.exists
+
+- name: Set agent ID fact
+  ansible.builtin.set_fact:
+    _onepam_agent_id: >-
+      {{ (_onepam_existing_agent_id.content | b64decode | trim)
+         if _onepam_agent_id_file.stat.exists
+         else _onepam_new_agent_id.stdout | trim }}
+
+- name: Validate agent ID is non-empty
+  ansible.builtin.assert:
+    that:
+      - _onepam_agent_id | length > 0
+    fail_msg: "Agent ID is empty — check {{ onepam_install_dir }}/etc/agent-id"
+
+- name: Persist agent ID
+  ansible.builtin.copy:
+    content: "{{ _onepam_agent_id }}"
+    dest: "{{ onepam_install_dir }}/etc/agent-id"
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+
+- name: Deploy agent configuration
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: "{{ onepam_install_dir }}/etc/agent.env"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart onepam-agent

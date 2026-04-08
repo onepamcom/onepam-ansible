@@ -1,0 +1,60 @@
+---
+- name: Verify target runs systemd
+  ansible.builtin.assert:
+    that:
+      - ansible_service_mgr == "systemd"
+    fail_msg: "OnePAM agent requires systemd (found {{ ansible_service_mgr }})"
+
+- name: Validate required parameters
+  ansible.builtin.assert:
+    that:
+      - onepam_tenant_id | length > 0
+      - onepam_tenant_id | regex_search('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    fail_msg: "onepam_tenant_id must be a valid UUID (got '{{ onepam_tenant_id }}')"
+  when: onepam_state == 'present'
+
+- name: Validate log_level
+  ansible.builtin.assert:
+    that:
+      - onepam_log_level in ['debug', 'info', 'warn', 'error']
+    fail_msg: "onepam_log_level must be one of: debug, info, warn, error (got '{{ onepam_log_level }}')"
+  when: onepam_state == 'present'
+
+- name: Validate group_uuid when provided
+  ansible.builtin.assert:
+    that:
+      - onepam_group_uuid | regex_search('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    fail_msg: "onepam_group_uuid must be a valid UUID (got '{{ onepam_group_uuid }}')"
+  when:
+    - onepam_state == 'present'
+    - onepam_group_uuid | length > 0
+
+- name: Detect architecture
+  ansible.builtin.set_fact:
+    _onepam_arch: >-
+      {{ 'arm64' if ansible_architecture == 'aarch64' else
+         ('amd64' if ansible_architecture in ['x86_64', 'AMD64'] else
+         ansible_architecture) }}
+
+- name: Validate architecture is supported
+  ansible.builtin.assert:
+    that:
+      - _onepam_arch in ['amd64', 'arm64']
+    fail_msg: "Unsupported architecture: {{ ansible_architecture }} (mapped to {{ _onepam_arch }})"
+  when: onepam_state == 'present'
+
+- name: Deploy OnePAM agent
+  when: onepam_state == 'present'
+  block:
+    - name: Install agent
+      ansible.builtin.include_tasks: install.yml
+
+    - name: Configure agent
+      ansible.builtin.include_tasks: config.yml
+
+    - name: Manage agent service
+      ansible.builtin.include_tasks: service.yml
+
+- name: Remove OnePAM agent
+  when: onepam_state == 'absent'
+  ansible.builtin.include_tasks: uninstall.yml

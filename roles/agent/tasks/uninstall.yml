@@ -1,0 +1,26 @@
+---
+- name: Stop and disable OnePAM agent service
+  ansible.builtin.systemd:
+    name: onepam-agent
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove systemd service unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/onepam-agent.service
+    state: absent
+  notify: Reload systemd
+
+- name: Remove agent binary
+  ansible.builtin.file:
+    path: "{{ onepam_install_dir }}/bin/onepam-agent"
+    state: absent
+
+- name: Remove agent configuration
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ onepam_install_dir }}/etc/agent.env"
+    - "{{ onepam_install_dir }}/etc/agent-id"

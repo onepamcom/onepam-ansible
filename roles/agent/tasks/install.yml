@@ -1,0 +1,22 @@
+---
+- name: Create OnePAM directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - "{{ onepam_install_dir }}/bin"
+    - "{{ onepam_install_dir }}/etc"
+    - "{{ onepam_install_dir }}/data/queue"
+
+- name: Download OnePAM agent binary
+  ansible.builtin.get_url:
+    url: "{{ onepam_release_url }}/agent/{{ onepam_agent_version }}/onepam-agent-linux-{{ _onepam_arch }}"
+    dest: "{{ onepam_install_dir }}/bin/onepam-agent"
+    owner: root
+    group: root
+    mode: "0755"
+    checksum: "sha256:{{ onepam_release_url }}/agent/{{ onepam_agent_version }}/onepam-agent-linux-{{ _onepam_arch }}.sha256"
+  notify: Restart onepam-agent
